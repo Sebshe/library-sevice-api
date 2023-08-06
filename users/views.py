@@ -63,8 +63,7 @@ class UserLogoutAPIView(GenericAPIView):
             return Response(status=status.HTTP_205_RESET_CONTENT)
         except Exception as error:
             return Response(
-                status=status.HTTP_400_BAD_REQUEST,
-                data={"error": str(error)}
+                status=status.HTTP_400_BAD_REQUEST, data={"error": str(error)}
             )
 
 
