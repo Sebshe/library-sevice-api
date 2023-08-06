@@ -39,17 +39,17 @@ class Payment(models.Model):
     def money_to_pay(self) -> Decimal:
         if self.type == "PAYMENT":
             days_borrowed = (
-                    self.borrowing.extend_return_date - self.borrowing.borrow_date
+                self.borrowing.extend_return_date - self.borrowing.borrow_date
             ).days
             return Decimal(days_borrowed) * self.borrowing.book.daily_fee
         if self.type == "FINE" and self.borrowing.actual_return_date:
             day_overdue = (
-                    self.borrowing.actual_return_date - self.borrowing.extend_return_date
+                self.borrowing.actual_return_date - self.borrowing.extend_return_date
             ).days
         return (
-                Decimal(day_overdue)
-                * self.borrowing.book.daily_fee
-                * Decimal(FINE_MULTIPLIER)
+            Decimal(day_overdue)
+            * self.borrowing.book.daily_fee
+            * Decimal(FINE_MULTIPLIER)
         )
 
     def create_stripe_session(self, success_url, cancel_url):
@@ -60,7 +60,7 @@ class Payment(models.Model):
                     "product_data": {
                         "name": f"{self.type} for {self.borrowing.book.title}",
                     },
-                    "unit_amount": int(self.money_to_pay * 100)
+                    "unit_amount": int(self.money_to_pay * 100),
                 },
                 "quantity": 1,
             }
