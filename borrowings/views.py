@@ -16,6 +16,7 @@ class BorrowingViewSet(viewsets.ModelViewSet):
     """
     Define the Borrowing ViewSet
     """
+
     queryset = Borrowing.objects.all()
     serializer_class = BorrowingSerializer
     permission_classes = (IsAuthenticated,)
