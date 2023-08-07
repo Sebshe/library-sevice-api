@@ -1,10 +1,10 @@
-from django.urls import path, include
+from django.urls import path
 from .views import (
     PaymentList,
     PaymentDetail,
-    create_stripe_session,
-    payment_success,
-    payment_cancel,
+    CreateStripeSession,
+    PaymentSuccess,
+    PaymentCancel,
 )
 
 urlpatterns = [
@@ -12,11 +12,11 @@ urlpatterns = [
     path("<int:pk>/", PaymentDetail.as_view(), name="payment_detail"),
     path(
         "<int:pk>/create-stripe-session/",
-        create_stripe_session,
+        CreateStripeSession.as_view(),
         name="create_stripe_session",
     ),
-    path("success/", payment_success, name="payment_success"),
-    path("cancel/", payment_cancel, name="payment_cancel"),
+    path("success/", PaymentSuccess.as_view(), name="payment_success"),
+    path("cancel/", PaymentCancel.as_view(), name="payment_cancel"),
 ]
 
 app_name = "payments"
