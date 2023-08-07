@@ -53,6 +53,7 @@ class UserLogoutAPIView(GenericAPIView):
     """
 
     permission_classes = (IsAuthenticated,)
+    serializer_class = None
 
     def post(self, request, *args, **kwargs):
         try:
