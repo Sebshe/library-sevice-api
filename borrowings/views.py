@@ -13,6 +13,7 @@ from books.models import Book
 from borrowings.models import Borrowing
 from borrowings.serializers import BorrowingSerializer, BorrowingDetailSerializer
 from borrowings.tasks import send_telegram_message
+from borrowings.utils import check_book_availability, create_borrowing
 from library_service_api import settings
 from payments.utils import create_payment_and_stripe_session
 
@@ -33,7 +34,9 @@ class BorrowingViewSet(viewsets.ModelViewSet):
 
     def check_book_availability(self, book):
         if book.inventory <= 0:
-            return Response({"message": "Book is out of stock"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"message": "Book is out of stock"}, status=status.HTTP_400_BAD_REQUEST
+            )
         return None
 
     def create(self, request, *args, **kwargs):
@@ -41,20 +44,18 @@ class BorrowingViewSet(viewsets.ModelViewSet):
         extend_return_date = request.data.get("extend_return_date")
         book = get_object_or_404(Book, id=book_id)
 
-        availability_response = self.check_book_availability(book)
+        availability_response = check_book_availability(book)
         if availability_response:
-            return availability_response
+            return Response(availability_response, status=400)
 
-        with transaction.atomic():
-            borrowing = Borrowing.objects.create(
-                extend_return_date=extend_return_date, user=request.user, book=book
-            )
-            book.inventory -= 1
-            book.save()
-            serializer = self.get_serializer(borrowing)
-            message = f"New borrowing created: {borrowing.book.title} by {borrowing.user.email}"
-            send_telegram_message.delay(message)
-            return Response(serializer.data)
+        borrowing = create_borrowing(request.user, book, extend_return_date)
+
+        serializer = self.get_serializer(borrowing)
+        message = (
+            f"New borrowing created: {borrowing.book.title} by {borrowing.user.email}"
+        )
+        send_telegram_message.delay(message)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def return_book(self, request, pk=None):

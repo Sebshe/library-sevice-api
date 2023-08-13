@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from books.models import Book
 from borrowings.models import Borrowing
+from borrowings.utils import create_borrowing
 
 User = get_user_model()
 
@@ -15,24 +16,15 @@ class BorrowingSerializer(serializers.ModelSerializer):
         model = Borrowing
         fields = "__all__"
 
-    def create(self, request, *args, **kwargs):
+    def create(self, validated_data):
+        request = self.context.get("request")
         book_id = request.data.get("book_id")
         extend_return_date = request.data.get("extend_return_date")
         book = get_object_or_404(Book, id=book_id)
 
-        if book.inventory > 0:
-            with transaction.atomic():
-                borrowing = Borrowing.objects.create(
-                    extend_return_date=extend_return_date, user=request.user, book=book
-                )
-                book.inventory -= 1
-                book.save()
-                serializer = self.get_serializer(borrowing)
+        borrowing = create_borrowing(request.user, book, extend_return_date)
 
-                return Response(serializer.data)
-
-        else:
-            return Response({"message": "Book is out of stock"}, status=400)
+        return borrowing
 
 
 class BorrowingDetailSerializer(serializers.ModelSerializer):
