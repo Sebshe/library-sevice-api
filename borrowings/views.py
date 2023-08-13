@@ -31,24 +31,30 @@ class BorrowingViewSet(viewsets.ModelViewSet):
     serializer_class = BorrowingSerializer
     permission_classes = (IsAuthenticated,)
 
+    def check_book_availability(self, book):
+        if book.inventory <= 0:
+            return Response({"message": "Book is out of stock"}, status=status.HTTP_400_BAD_REQUEST)
+        return None
+
     def create(self, request, *args, **kwargs):
         book_id = request.data.get("book_id")
         extend_return_date = request.data.get("extend_return_date")
         book = get_object_or_404(Book, id=book_id)
-        if book.inventory > 0:
-            with transaction.atomic():
-                borrowing = Borrowing.objects.create(
-                    extend_return_date=extend_return_date, user=request.user, book=book
-                )
-                book.inventory -= 1
-                book.save()
-                serializer = self.get_serializer(borrowing)
-                message = f"New borrowing created: {borrowing.book.title} by {borrowing.user.email}"
-                send_telegram_message.delay(message)
-                return Response(serializer.data)
 
-        else:
-            return Response({"message": "Book is out of stock"}, status=400)
+        availability_response = self.check_book_availability(book)
+        if availability_response:
+            return availability_response
+
+        with transaction.atomic():
+            borrowing = Borrowing.objects.create(
+                extend_return_date=extend_return_date, user=request.user, book=book
+            )
+            book.inventory -= 1
+            book.save()
+            serializer = self.get_serializer(borrowing)
+            message = f"New borrowing created: {borrowing.book.title} by {borrowing.user.email}"
+            send_telegram_message.delay(message)
+            return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def return_book(self, request, pk=None):
