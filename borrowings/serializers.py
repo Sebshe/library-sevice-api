@@ -1,10 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.shortcuts import get_object_or_404
+
 from rest_framework import serializers
 from rest_framework.response import Response
 
-from books.models import Book
 from borrowings.models import Borrowing
 from borrowings.utils import create_borrowing
 
@@ -16,15 +14,12 @@ class BorrowingSerializer(serializers.ModelSerializer):
         model = Borrowing
         fields = "__all__"
 
-    def create(self, validated_data):
-        request = self.context.get("request")
+    def create(self, request, *args, **kwargs):
         book_id = request.data.get("book_id")
         extend_return_date = request.data.get("extend_return_date")
-        book = get_object_or_404(Book, id=book_id)
-
-        borrowing = create_borrowing(request.user, book, extend_return_date)
-
-        return borrowing
+        borrowing = create_borrowing(book_id, extend_return_date, request.user)
+        serializer = self.get_serializer(borrowing)
+        return Response(serializer.data)
 
 
 class BorrowingDetailSerializer(serializers.ModelSerializer):

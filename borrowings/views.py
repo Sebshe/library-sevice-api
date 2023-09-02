@@ -1,7 +1,6 @@
 from datetime import date
 
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets, status
@@ -13,7 +12,7 @@ from books.models import Book
 from borrowings.models import Borrowing
 from borrowings.serializers import BorrowingSerializer, BorrowingDetailSerializer
 from borrowings.tasks import send_telegram_message
-from borrowings.utils import check_book_availability, create_borrowing
+from borrowings.utils import create_borrowing
 from library_service_api import settings
 from payments.utils import create_payment_and_stripe_session
 
@@ -32,24 +31,10 @@ class BorrowingViewSet(viewsets.ModelViewSet):
     serializer_class = BorrowingSerializer
     permission_classes = (IsAuthenticated,)
 
-    def check_book_availability(self, book):
-        if book.inventory <= 0:
-            return Response(
-                {"message": "Book is out of stock"}, status=status.HTTP_400_BAD_REQUEST
-            )
-        return None
-
     def create(self, request, *args, **kwargs):
         book_id = request.data.get("book_id")
         extend_return_date = request.data.get("extend_return_date")
-        book = get_object_or_404(Book, id=book_id)
-
-        availability_response = check_book_availability(book)
-        if availability_response:
-            return Response(availability_response, status=400)
-
-        borrowing = create_borrowing(request.user, book, extend_return_date)
-
+        borrowing = create_borrowing(book_id, extend_return_date, request.user)
         serializer = self.get_serializer(borrowing)
         message = (
             f"New borrowing created: {borrowing.book.title} by {borrowing.user.email}"
@@ -118,10 +103,10 @@ class BorrowingViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(actual_return_date__isnull=False)
         return queryset
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = BorrowingDetailSerializer(instance)
-        return Response(serializer.data)
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return BorrowingDetailSerializer
+        return BorrowingSerializer
 
     @extend_schema(
         parameters=[

@@ -1,32 +1,27 @@
 import os
-from enum import Enum
 
-import stripe
 from _decimal import Decimal
 from django.core.validators import URLValidator
 from django.db import models
 from rest_framework.exceptions import ValidationError
 
 from borrowings.models import Borrowing
+from payments.stipe_utils import create_stripe_session
 
 FINE_MULTIPLIER = 2
 
 
 class Payment(models.Model):
-    class PaymentStatus(Enum):
-        PENDING = "PENDING"
-        PAID = "PAID"
+    class PaymentStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PAID = "PAID", "Paid"
 
-    class PaymentType(Enum):
-        PAYMENT = "PAYMENT"
-        FINE = "FINE"
+    class PaymentType(models.TextChoices):
+        PAYMENT = "PAYMENT", "Payment"
+        FINE = "FINE", "Fine"
 
-    status = models.CharField(
-        max_length=7, choices=[(status.name, status.value) for status in PaymentStatus]
-    )
-    type = models.CharField(
-        max_length=7, choices=[(type.name, type.value) for type in PaymentType]
-    )
+    status = models.CharField(max_length=7, choices=PaymentStatus.choices)
+    type = models.CharField(max_length=7, choices=PaymentType.choices)
     borrowing = models.ForeignKey(
         to=Borrowing, on_delete=models.CASCADE, related_name="payments"
     )
@@ -53,26 +48,10 @@ class Payment(models.Model):
         )
 
     def create_stripe_session(self, success_url, cancel_url):
-        line_items = [
-            {
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {
-                        "name": f"{self.type} for {self.borrowing.book.title}",
-                    },
-                    "unit_amount": int(self.money_to_pay * 100),
-                },
-                "quantity": 1,
-            }
-        ]
-
-        stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=line_items,
-            mode="payment",
-            success_url=success_url,
-            cancel_url=cancel_url,
+        money_to_pay = self.money_to_pay
+        book_title = self.borrowing.book.title
+        session = create_stripe_session(
+            self.type, money_to_pay, book_title, success_url, cancel_url
         )
 
         self.stripe_session_id = session["id"]

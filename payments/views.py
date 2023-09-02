@@ -9,6 +9,22 @@ from payments.permissions import IsAdminOrSelf
 from payments.serializers import PaymentSerializer
 
 
+class BasePaymentView(APIView):
+    """
+    Base view for handling payments
+    """
+
+    serializer_class = PaymentSerializer
+
+    def handle_payment_result(self, session_id, success_message, error_message):
+        if session_id:
+            return Response({"message": success_message})
+        else:
+            return Response(
+                {"error": error_message}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+
 class PaymentList(generics.ListCreateAPIView):
     """
     View for listing and creating Payment objects
@@ -19,9 +35,11 @@ class PaymentList(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return Payment.objects.all()
-        return Payment.objects.filter(borrowing__user=user)
+        queryset = Payment.objects.all()
+        if not user.is_staff:
+            queryset = queryset.filter(borrowing__user=user)
+
+        return queryset
 
 
 class PaymentDetail(generics.RetrieveAPIView):
@@ -46,10 +64,7 @@ class CreateStripeSession(APIView):
     serializer_class = PaymentSerializer
 
     def post(self, request, pk):
-        try:
-            payment = Payment.objects.get(pk=pk)
-        except Payment.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+        payment = get_object_or_404(Payment, pk=pk)
 
         success_url = (
             request.build_absolute_uri(reverse("payments:payment_success"))
@@ -73,45 +88,28 @@ class CreateStripeSession(APIView):
         )
 
 
-class PaymentSuccess(APIView):
+class PaymentSuccess(BasePaymentView):
     """
     API view for handling successful payments
     """
 
-    serializer_class = PaymentSerializer
+    def get(self, request):
+        session_id = request.GET.get("session_id")
+        return self.handle_payment_result(
+            session_id, "Payment was successful!", "Session ID not found."
+        )
+
+
+class PaymentCancel(BasePaymentView):
+    """
+    API view for handling canceled payments
+    """
 
     def get(self, request):
         session_id = request.GET.get("session_id")
-        if session_id:
-            payment = Payment.objects.get(stripe_session_id=session_id)
-            payment.status = Payment.PaymentStatus.PAID
-            payment.save()
-            return Response({"message": "Payment was successful!"})
-        else:
-            return Response(
-                {"error": "Session ID not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-
-class PaymentCancel(APIView):
-    """
-    Retrieve the session ID from the query parameters
-    """
-
-    serializer_class = PaymentSerializer
-
-    def get(self, request):
-        session_id = request.GET.get("session_id")
-        if session_id:
-            return Response(
-                {
-                    "message": "Payment was not successful and can be paid later. "
-                    "The session is available for 24h."
-                }
-            )
-        else:
-            return Response(
-                {"error": "Session ID not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        return self.handle_payment_result(
+            session_id,
+            "Payment was not successful and can be paid later. "
+            "The session is available for 24h.",
+            "Session ID not found.",
+        )
